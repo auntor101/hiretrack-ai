@@ -1,0 +1,135 @@
+# HireTrack AI
+
+A backend-first job application pipeline built with FastAPI, PostgreSQL, and LiteLLM. It handles job discovery via Exa AI, scores resumes against job descriptions using a local multi-factor ATS engine, generates tailored resumes and cover letters, and surfaces everything through a Streamlit dashboard.
+
+## What it does
+
+- Searches for jobs using Exa AI semantic search or lets you add listings manually
+- Runs a local ATS compatibility score across skills, experience, education, and keywords — no API call required
+- Generates tailored resumes (PDF and DOCX) and cover letters using your LLM provider of choice
+- Tracks the full application lifecycle: queued ? pending review ? applied ? interview ? offer
+- Identifies skill gaps and surfaces the most common missing skills across all applications
+- Exports the full pipeline as a CSV
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| API | FastAPI + asyncio |
+| Database | PostgreSQL via SQLAlchemy 2.0 async + Alembic |
+| Queue | Redis (graceful fallback if unavailable) |
+| LLM | LiteLLM — default Groq (`llama-3.3-70b-versatile`), fallback to OpenAI / OpenRouter |
+| ATS Engine | Local: spaCy, TF-IDF keyword analysis, weighted scoring formula |
+| Vector Search | FAISS + sentence-transformers |
+| Job Discovery | Exa AI semantic search |
+| Documents | WeasyPrint (PDF) + python-docx (DOCX) |
+| Dashboard | Streamlit |
+| Observability | structlog (JSON) + Prometheus metrics |
+
+## Setup
+
+**Prerequisites:** Python 3.11+, PostgreSQL 14+, Redis (optional)
+
+```bash
+# Clone and enter the project
+git clone https://github.com/your-username/hiretrack-ai.git
+cd hiretrack-ai
+
+# Install dependencies
+cd backend
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install ".[dev]"
+python -m spacy download en_core_web_sm
+
+# Configure environment
+cp .env.example .env
+# Edit .env — set DATABASE_URL, LLM__GROQ_API_KEY, optionally EXA_API_KEY
+
+# Run migrations and start the API
+alembic upgrade head
+uvicorn app.main:app --reload
+
+# In a second terminal, start the dashboard
+cd ..
+streamlit run streamlit_app/app.py
+```
+
+Or with Docker:
+
+```bash
+cp .env.example .env   # fill in API keys
+docker compose up --build
+```
+
+Services: API at `localhost:8000`, dashboard at `localhost:8501`.
+
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL async connection string |
+| `LLM__GROQ_API_KEY` | Yes | Groq API key (default LLM provider) |
+| `EXA_API_KEY` | No | Exa AI for job search |
+| `LLM__OPENAI_API_KEY` | No | OpenAI fallback |
+| `LLM__OPENROUTER_API_KEY` | No | OpenRouter fallback |
+| `REDIS_URL` | No | Queue backend (defaults to `redis://localhost:6379/0`) |
+
+See `.env.example` for the full list.
+
+## API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `POST` | `/api/v1/jobs/` | Add a job manually |
+| `POST` | `/api/v1/jobs/search` | Semantic job search via Exa |
+| `GET` | `/api/v1/jobs/` | List jobs (paginated) |
+| `POST` | `/api/v1/applications/` | Create an application |
+| `GET` | `/api/v1/applications/` | List applications (filterable by status) |
+| `GET` | `/api/v1/applications/export` | Export all applications as CSV |
+| `POST` | `/api/v1/applications/{id}/score-resume` | Run ATS scorer |
+| `POST` | `/api/v1/applications/{id}/skill-gap` | Analyse skill gaps |
+| `POST` | `/api/v1/applications/{id}/cover-letter` | Generate cover letter via LLM |
+| `PUT` | `/api/v1/applications/{id}/status` | Update status |
+| `GET` | `/api/v1/dashboard/stats` | Aggregated pipeline statistics |
+| `GET` | `/api/v1/resumes/` | List resumes |
+| `POST` | `/api/v1/resumes/generate` | Generate tailored resume |
+| `GET` | `/api/v1/analytics/` | Funnel and ATS distribution data |
+
+Interactive docs are at `http://localhost:8000/docs`.
+
+## How ATS scoring works
+
+The local engine uses a weighted combination of four factors:
+
+| Factor | Weight | Method |
+|---|---|---|
+| Skill match | 40% | Exact + fuzzy + spaCy semantic similarity |
+| Experience | 30% | Keyword detection + year estimation |
+| Education | 20% | Level parsing (BSc ? Masters ? PhD) |
+| Keywords | 10% | TF-IDF against job description |
+
+Scores are stored in `resume_scores` and exposed via `/api/v1/applications/{id}/score-resume`.
+
+## Running tests
+
+```bash
+cd backend
+pytest tests/ -v
+```
+
+Unit tests run without a database. Integration tests require PostgreSQL — set `DATABASE_URL` in your environment before running.
+
+## Seeding sample data
+
+```bash
+cd backend
+python -m scripts.seed
+```
+
+Inserts 300 job listings from Bangladeshi tech companies (Brain Station 23, Chaldal, bKash, Pathao, and others) and roughly 100 applications with varied statuses.
+
+## Deployment
+
+A `render.yaml` is included for one-click deployment to Render. Set the env var slots listed in the file before deploying.

@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: hiretrack-ai
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install ".[postgres]" && python -m spacy download en_core_web_sm && alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hiretrack-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+      - key: LLM__GROQ_API_KEY
+        sync: false
+      - key: LLM__PREFERRED_PROVIDER
+        value: groq
+      - key: LLM__DEFAULT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM__FALLBACK_PROVIDERS
+        value: '["openai", "openrouter"]'
+      - key: EXA_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: APPLY_MODE
+        value: review
+      - key: MIN_ATS_SCORE
+        value: "0.75"
+      - key: CORS_ORIGINS
+        value: '["https://hiretrack-dashboard.onrender.com", "http://localhost:8501"]'
+
+databases:
+  - name: hiretrack-db
+    databaseName: hiretrack
+    user: hiretrack
+    plan: free
