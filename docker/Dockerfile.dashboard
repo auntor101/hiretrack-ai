@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+# Install pinned dependencies at build time so they are cached in the image
+# layer and not re-downloaded on every container restart (Issue #18 fix).
+RUN pip install --no-cache-dir \
+        streamlit==1.43.2 \
+        requests==2.32.3 \
+        pandas==2.2.3 \
+        plotly==5.24.1
+
+WORKDIR /app
+
+# Copy only the Streamlit app – backend source is not needed here.
+COPY streamlit_app/ ./streamlit_app/
+COPY .streamlit/ ./.streamlit/
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "streamlit_app/app.py", \
+     "--server.port", "8501", \
+     "--server.address", "0.0.0.0"]
