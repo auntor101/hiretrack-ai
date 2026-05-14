@@ -25,6 +25,7 @@ from app.schemas.application import (
     ApplicationResponse,
     ApplicationStatusUpdate,
     CoverLetterOut,
+    InterviewPrepOut,
     ResumeScoreOut,
     SkillGapOut,
 )
@@ -229,15 +230,49 @@ async def score_resume(
     from app.core.ats.scorer import ResumeScorer, ScoringWeights
     from app.core.ats.skill_matcher import SkillMatcher
 
+    skill_matcher = SkillMatcher(nlp)  # type: ignore[arg-type]
     scorer = ResumeScorer(
-        skill_matcher=SkillMatcher(nlp),  # type: ignore[arg-type]
+        skill_matcher=skill_matcher,
         keyword_analyzer=KeywordAnalyzer(nlp),  # type: ignore[arg-type]
         experience_analyzer=ExperienceAnalyzer(nlp),  # type: ignore[arg-type]
         weights=ScoringWeights(),
     )
 
-    resume_text = f"{job.title} {job_description}"
-    candidate_profile: dict = {"skills": [], "experience": [], "education": []}
+    # Load candidate profile from user settings
+    from app.models.user_settings import UserSettings
+    settings_row = await db.execute(
+        select(UserSettings).where(UserSettings.id == "singleton")
+    )
+    user_settings = settings_row.scalar_one_or_none()
+    raw_profile: dict = {}
+    if user_settings and isinstance(user_settings.candidate_profile, dict):
+        raw_profile = user_settings.candidate_profile
+
+    candidate_skills: list[str] = raw_profile.get("skills", [])
+    candidate_experience: list = raw_profile.get("experience", [])
+    candidate_education: list = raw_profile.get("education", [])
+
+    # Build resume text from profile; fall back to extracted skills from job description
+    resume_parts: list[str] = []
+    if raw_profile.get("summary"):
+        resume_parts.append(raw_profile["summary"])
+    if candidate_skills:
+        resume_parts.append(" ".join(candidate_skills))
+    for exp in candidate_experience:
+        if isinstance(exp, dict):
+            resume_parts.append(f"{exp.get('title', '')} {exp.get('description', '')}")
+    resume_text = " ".join(resume_parts).strip() or ""
+
+    # If no profile configured, extract candidate skills from job description as a proxy
+    if not candidate_skills:
+        candidate_skills = list(skill_matcher.extract_skills(job_description))
+        resume_text = resume_text or job_description
+
+    candidate_profile: dict = {
+        "skills": candidate_skills,
+        "experience": candidate_experience,
+        "education": candidate_education,
+    }
 
     details = scorer.score_resume(resume_text, job_description, candidate_profile, job_metadata)
     overall = int(round(details.overall_score * 100))
@@ -299,9 +334,17 @@ async def skill_gap_analysis(
     nlp = _get_nlp()
 
     from app.core.ats.skill_matcher import SkillMatcher
+    from app.models.user_settings import UserSettings as _US
 
     matcher = SkillMatcher(nlp)  # type: ignore[arg-type]
-    candidate_skills: list[str] = []
+
+    _settings_row = await db.execute(select(_US).where(_US.id == "singleton"))
+    _user_settings = _settings_row.scalar_one_or_none()
+    _raw: dict = {}
+    if _user_settings and isinstance(_user_settings.candidate_profile, dict):
+        _raw = _user_settings.candidate_profile
+    candidate_skills: list[str] = _raw.get("skills", [])
+
     matched = [s for s in all_required if matcher.has_skill(candidate_skills, s)]
     missing = [s for s in all_required if not matcher.has_skill(candidate_skills, s)]
 
@@ -361,3 +404,69 @@ async def generate_cover_letter(
 
     logger.info("cover_letter_generated", app_id=app_id, template=template)
     return CoverLetterOut(text=response.content, template_used=str(template))
+
+
+@router.post(
+    "/{app_id}/interview-prep",
+    response_model=InterviewPrepOut,
+    summary="Generate tailored interview questions for an application",
+)
+async def interview_prep(
+    app_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> InterviewPrepOut:
+    """Use the configured LLM to generate interview questions tailored to the job.
+
+    Returns 3 technical and 3 behavioral questions with key talking points
+    and a delivery tip for each. Idempotent — safe to call multiple times.
+    """
+    import json
+
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(Application)
+        .options(selectinload(Application.job))
+        .where(Application.id == app_id),
+    )
+    application = result.scalar_one_or_none()
+    if application is None:
+        raise RecordNotFoundError("Application", app_id)
+
+    job = application.job
+    job_description = (job.description or f"{job.title} at {job.company}")[:2500]
+
+    prompt = (
+        f"You are an expert interview coach preparing a candidate for a job interview.\n\n"
+        f"Job Title: {job.title}\nCompany: {job.company}\n"
+        f"Job Description:\n{job_description}\n\n"
+        "Generate exactly 6 interview questions: 3 technical/role-specific and 3 behavioral (STAR format).\n"
+        "For each question provide:\n"
+        '- "question": the interview question\n'
+        '- "key_points": array of 3 bullet points to address in the answer\n'
+        '- "tip": one sentence delivery tip\n\n'
+        'Respond ONLY with JSON: {"questions": [...]}'
+    )
+
+    client = LLMClient()
+    try:
+        response = await client.complete(
+            prompt=prompt,
+            purpose="interview_prep",
+            response_format={"type": "json_object"},
+            max_tokens=1500,
+        )
+        data = json.loads(response.content)
+        raw_questions = data.get("questions", [])
+        from app.schemas.application import InterviewQuestion
+        questions = [InterviewQuestion(**q) for q in raw_questions if isinstance(q, dict)]
+    except Exception as exc:
+        logger.error("interview_prep_failed", app_id=app_id, error=str(exc))
+        questions = []
+
+    logger.info("interview_prep_generated", app_id=app_id, count=len(questions))
+    return InterviewPrepOut(
+        questions=questions,
+        job_title=job.title,
+        company=job.company,
+    )

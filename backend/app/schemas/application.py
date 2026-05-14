@@ -107,6 +107,22 @@ class CoverLetterOut(BaseModel):
     template_used: str
 
 
+class InterviewQuestion(BaseModel):
+    """A single generated interview question with guidance."""
+
+    question: str
+    key_points: list[str] = Field(default_factory=list)
+    tip: str = ""
+
+
+class InterviewPrepOut(BaseModel):
+    """Generated interview prep bundle for an application."""
+
+    questions: list[InterviewQuestion] = Field(default_factory=list)
+    job_title: str
+    company: str
+
+
 class DashboardStats(BaseModel):
     """High-level pipeline statistics for the dashboard."""
 

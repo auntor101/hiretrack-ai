@@ -151,18 +151,9 @@ async def list_jobs(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     status: str | None = None,
+    search: str | None = None,
 ) -> JobListResponse:
-    """List jobs with pagination and optional status filter.
-
-    Args:
-        db: Async database session.
-        page: Page number (1-indexed).
-        page_size: Items per page.
-        status: Optional status filter.
-
-    Returns:
-        Paginated job list response.
-    """
+    """List jobs with pagination, optional status and text search filters."""
     page_size = min(page_size, MAX_PAGE_SIZE)
     offset = (page - 1) * page_size
 
@@ -172,6 +163,16 @@ async def list_jobs(
     if status:
         query = query.where(Job.status == status)
         count_query = count_query.where(Job.status == status)
+
+    if search:
+        like = f"%{search.lower()}%"
+        search_filter = (
+            func.lower(Job.title).like(like)
+            | func.lower(Job.company).like(like)
+            | func.lower(Job.location).like(like)
+        )
+        query = query.where(search_filter)
+        count_query = count_query.where(search_filter)
 
     query = query.order_by(Job.created_at.desc()).offset(offset).limit(page_size)
 

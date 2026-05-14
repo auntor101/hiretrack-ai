@@ -123,3 +123,15 @@ export interface LlmProvider {
   configured: boolean;
   is_primary: boolean;
 }
+
+export interface InterviewQuestion {
+  question: string;
+  key_points: string[];
+  tip: string;
+}
+
+export interface InterviewPrepResult {
+  questions: InterviewQuestion[];
+  job_title: string;
+  company: string;
+}

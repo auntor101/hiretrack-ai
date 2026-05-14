@@ -11,6 +11,7 @@ import type {
   LlmUsage,
   Settings,
   LlmProvider,
+  InterviewPrepResult,
 } from './types';
 
 const api = axios.create({
@@ -25,6 +26,7 @@ export const fetchJobs = (params: {
   search?: string;
   job_type?: string;
   experience_level?: string;
+  status?: string;
 }): Promise<JobsResponse> =>
   api.get('/jobs', { params }).then((r) => r.data);
 
@@ -83,3 +85,6 @@ export const updateSettings = (data: Partial<Settings>): Promise<Settings> =>
 
 export const fetchLlmProviders = (): Promise<LlmProvider[]> =>
   api.get('/settings/llm-providers').then((r) => r.data);
+
+export const generateInterviewPrep = (id: string): Promise<InterviewPrepResult> =>
+  api.post(`/applications/${id}/interview-prep`).then((r) => r.data);

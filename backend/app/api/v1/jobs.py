@@ -56,10 +56,11 @@ async def list_jobs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=100),
     status: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=200),
     db: AsyncSession = Depends(get_db),
 ) -> JobListResponse:
-    """List stored job listings with optional status filter."""
-    return await job_service.list_jobs(db, page, page_size, status)
+    """List stored job listings with optional status and text search filters."""
+    return await job_service.list_jobs(db, page, page_size, status, search)
 
 
 @router.get(
