@@ -1,7 +1,12 @@
-"""Background worker that processes job applications from the Redis queue.
+"""Background worker that polls the database for queued applications.
 
-Handles ATS scoring and tailored resume generation for queued applications.
-Platform submission is handled manually after review.
+Replaces the Redis-based queue with a lightweight DB-polling approach.
+Uses SELECT FOR UPDATE SKIP LOCKED so the worker is safe to run in-process
+alongside the FastAPI app without double-processing any application.
+
+Pipeline per application:
+  queued → applying (locked) → ATS score → generate resume → pending_review
+  (or failed on any fatal error)
 """
 
 import asyncio
@@ -12,19 +17,20 @@ import structlog
 from sqlalchemy import select
 
 from app.api.websocket.events import manager as ws_manager
-from app.config.constants import QUEUE_APPLY, ApplicationStatus
+from app.config.constants import ApplicationStatus
 from app.config.settings import get_settings
 from app.core.exceptions import AutoApplyError
-from app.db.redis import get_redis, init_redis_pool
 from app.db.session import async_session_factory
 from app.models.application import Application
 from app.models.job import Job
 from app.models.resume import Resume
 from app.schemas.resume import ResumeGenerateRequest
 from app.services import resume as resume_service
-from app.services.queue import dequeue
 
 logger = structlog.get_logger(__name__)
+
+# How long to sleep between polls when no work is found (seconds)
+_POLL_INTERVAL = 5
 
 
 async def _broadcast_progress(
@@ -32,13 +38,7 @@ async def _broadcast_progress(
     status: str,
     detail: str = "",
 ) -> None:
-    """Send application progress update via WebSocket.
-
-    Args:
-        application_id: Unique application identifier.
-        status: Current status string.
-        detail: Optional detail message.
-    """
+    """Send application progress update via WebSocket."""
     message: dict[str, Any] = {
         "type": "application_progress",
         "application_id": application_id,
@@ -56,15 +56,7 @@ async def _update_application_status(
     ats_score: float | None = None,
     applied_at: datetime | None = None,
 ) -> None:
-    """Persist application status changes to the database.
-
-    Args:
-        app_id: Application UUID.
-        status: New status value.
-        notes: Optional notes to attach.
-        ats_score: Optional ATS score to record.
-        applied_at: Optional applied timestamp.
-    """
+    """Persist application status changes to the database."""
     try:
         async with async_session_factory() as db:
             result = await db.execute(
@@ -93,8 +85,7 @@ async def _update_application_status(
 async def _run_ats_scoring(job: Job, resume_id: str) -> float | None:
     """Run ATS scoring for a job against a resume.
 
-    Returns the overall score or None if scoring cannot be performed
-    (e.g. missing resume text, spaCy not installed).
+    Returns the overall score or None if scoring cannot be performed.
     """
     if not resume_id:
         return None
@@ -136,9 +127,7 @@ async def _run_ats_scoring(job: Job, resume_id: str) -> float | None:
         job_description = job.description or ""
         job_metadata: dict[str, Any] = {}
         if job.skills_required and isinstance(job.skills_required, dict):
-            job_metadata["required_skills"] = job.skills_required.get(
-                "required", [],
-            )
+            job_metadata["required_skills"] = job.skills_required.get("required", [])
 
         candidate_profile: dict[str, Any] = {
             "skills": [],
@@ -160,17 +149,16 @@ async def _run_ats_scoring(job: Job, resume_id: str) -> float | None:
 
 
 async def process_application(payload: dict[str, Any]) -> None:
-    """Process a single application from the queue.
+    """Process a single application payload.
 
-    Pipeline: load job -> ATS score resume -> generate tailored resume.
-    Applications are queued for human review before submission.
+    Pipeline: load job → ATS score resume → generate tailored resume.
+    Applications are then set to pending_review for human approval.
     """
     job_id: str = payload.get("job_id", "")
     app_id: str = payload.get("application_id", "")
     resume_id: str = payload.get("resume_id", "")
 
     logger.info("worker.processing", job_id=job_id, app_id=app_id)
-
     await _broadcast_progress(app_id, "processing")
 
     try:
@@ -210,7 +198,7 @@ async def process_application(payload: dict[str, Any]) -> None:
             await _broadcast_progress(app_id, ApplicationStatus.FAILED, detail=skip_msg)
             return
 
-        # Step 3: Generate tailored resume
+        # Step 3: Generate tailored resume (best-effort)
         await _broadcast_progress(app_id, "generating_resume")
         try:
             if resume_id:
@@ -225,7 +213,7 @@ async def process_application(payload: dict[str, Any]) -> None:
         except Exception as exc:
             logger.warning("worker.resume_generation_failed", app_id=app_id, error=str(exc))
 
-        # Ready for manual review/submission
+        # Done — ready for manual review
         await _update_application_status(
             app_id,
             ApplicationStatus.PENDING_REVIEW,
@@ -235,41 +223,72 @@ async def process_application(payload: dict[str, Any]) -> None:
         logger.info("worker.completed", job_id=job_id, app_id=app_id)
 
     except AutoApplyError as exc:
-        logger.error("worker.application_error", job_id=job_id, app_id=app_id, error=str(exc), code=exc.code)
+        logger.error(
+            "worker.application_error",
+            job_id=job_id, app_id=app_id, error=str(exc), code=exc.code,
+        )
         await _update_application_status(app_id, ApplicationStatus.FAILED, notes=str(exc))
         await _broadcast_progress(app_id, ApplicationStatus.FAILED, detail=str(exc))
 
     except Exception as exc:
         logger.error("worker.unexpected_error", job_id=job_id, app_id=app_id, error=str(exc))
-        await _update_application_status(app_id, ApplicationStatus.FAILED, notes=f"Unexpected error: {exc}")
+        await _update_application_status(
+            app_id, ApplicationStatus.FAILED, notes=f"Unexpected error: {exc}",
+        )
         await _broadcast_progress(app_id, ApplicationStatus.FAILED, detail="Unexpected error")
 
 
-async def run_worker() -> None:
-    """Main worker loop consuming from the apply queue.
+async def _pick_and_lock_queued() -> dict[str, Any] | None:
+    """Atomically claim one queued application and set it to APPLYING.
 
-    Blocks indefinitely, polling the Redis queue for application tasks.
-    Falls back gracefully if Redis is unavailable.
+    Uses SELECT FOR UPDATE SKIP LOCKED so concurrent workers (or restarts)
+    never double-process the same application.
+
+    Returns a payload dict or None if nothing is queued.
     """
-    settings = get_settings()
-    await init_redis_pool(settings.redis_url)
-    redis = get_redis()
-    if not redis:
-        logger.error("worker.redis_unavailable")
-        return
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(Application)
+            .where(Application.status == ApplicationStatus.QUEUED)
+            .order_by(Application.created_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True),
+        )
+        application = result.scalar_one_or_none()
 
-    logger.info("worker.started", queue=QUEUE_APPLY)
+        if application is None:
+            return None
+
+        # Claim it immediately so no other worker picks it up
+        application.status = ApplicationStatus.APPLYING
+        await db.commit()
+
+        return {
+            "application_id": application.id,
+            "job_id": application.job_id,
+            "resume_id": application.resume_id or "",
+        }
+
+
+async def run_worker() -> None:
+    """Main worker loop — polls the database for queued applications.
+
+    Runs forever as an asyncio background task alongside the FastAPI server.
+    Polls every {_POLL_INTERVAL} seconds when idle; processes immediately
+    when work is found. Handles cancellation gracefully on shutdown.
+    """
+    logger.info("worker.started", mode="db_poll", poll_interval=_POLL_INTERVAL)
 
     while True:
         try:
-            message = await dequeue(redis, QUEUE_APPLY, timeout=5)
-            if message is not None:
-                payload = message.get("payload", {})
+            payload = await _pick_and_lock_queued()
+            if payload is not None:
                 await process_application(payload)
+            else:
+                await asyncio.sleep(_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            logger.info("worker.stopped")
+            return
         except Exception as exc:
             logger.error("worker.loop_error", error=str(exc))
-            await asyncio.sleep(1)
-
-
-if __name__ == "__main__":
-    asyncio.run(run_worker())
+            await asyncio.sleep(_POLL_INTERVAL)

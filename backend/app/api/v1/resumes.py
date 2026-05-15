@@ -143,40 +143,18 @@ async def download_resume(
     resume_id: str,
     format: str = Query(default="pdf", pattern="^(pdf|docx)$"),
     db: AsyncSession = Depends(get_db),
-) -> FileResponse:
-    """Download a resume in PDF or DOCX format.
+) -> None:
+    """Resume file downloads are not available without persistent storage.
 
-    The resolved file path is verified to be within the allowed data directory
-    to prevent path-traversal attacks if a database record is ever tampered with.
+    Resume text content is accessible via GET /api/v1/resumes/{id} and the
+    profile data via GET /api/v1/resumes/{id}/profile-data.
     """
-    resume = await resume_service.get_resume(db, resume_id)
-
-    raw_path = resume.file_path_pdf if format == "pdf" else resume.file_path_docx
-    if not raw_path:
-        raise RecordNotFoundError("Resume file", resume_id)
-
-    # Resolve symlinks and '..' components, then verify the path is inside data/
-    resolved = Path(raw_path).resolve()
-    if not str(resolved).startswith(str(_RESUME_BASE_DIR)):
-        logger.error(
-            "path_traversal_attempt",
-            resume_id=resume_id,
-            raw_path=raw_path,
-            resolved=str(resolved),
-        )
-        raise HTTPException(status_code=403, detail="Access denied.")
-
-    if not resolved.exists():
-        raise RecordNotFoundError("Resume file", resume_id)
-
-    media_type = (
-        "application/pdf" if format == "pdf" else
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
-    return FileResponse(
-        path=str(resolved),
-        media_type=media_type,
-        filename=f"{resume.name}.{format}",
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "File downloads are disabled: the server uses ephemeral storage. "
+            "Resume text is available via the profile-data endpoint."
+        ),
     )
 
 

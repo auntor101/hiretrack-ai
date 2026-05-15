@@ -1,5 +1,7 @@
 """FastAPI application factory and lifespan management."""
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -10,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
+from app.api.deps import verify_api_key
 from app.api.v1.router import v1_router
 from app.api.websocket.endpoint import router as ws_router
 from app.config.constants import API_V1_PREFIX, APP_TITLE, APP_VERSION
@@ -19,6 +22,7 @@ from app.db.redis import close_redis_pool, init_redis_pool
 from app.db.session import engine
 from app.models import Base
 from app.observability.logging import configure_logging
+from app.workers.application_worker import run_worker
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
@@ -42,9 +46,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     await init_redis_pool(settings.redis_url)
 
+    # Start the DB-polling background worker
+    worker_task = asyncio.create_task(run_worker())
+    logger.info("worker_task_started")
+
     yield
 
-    # Shutdown
+    # Shutdown — cancel worker first, then release connections
+    worker_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await worker_task
     await close_redis_pool()
     await engine.dispose()
     logger.info("app_stopped")
@@ -122,8 +133,13 @@ def create_app() -> FastAPI:
             content={"detail": exc.message, "code": exc.code},
         )
 
-    # Routes
-    app.include_router(v1_router, prefix=API_V1_PREFIX)
+    # Routes — all /api/v1/* routes require the X-API-Key header
+    from fastapi import Depends
+    app.include_router(
+        v1_router,
+        prefix=API_V1_PREFIX,
+        dependencies=[Depends(verify_api_key)],
+    )
     app.include_router(ws_router)
 
     @app.get("/")

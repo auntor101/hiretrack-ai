@@ -13,8 +13,6 @@ services:
         fromDatabase:
           name: hiretrack-db
           property: connectionString
-      - key: REDIS_URL
-        sync: false
       - key: LLM__GROQ_API_KEY
         sync: false
       - key: LLM__PREFERRED_PROVIDER
@@ -36,6 +34,9 @@ services:
       - key: CORS_ORIGINS
         # Lock this to your exact Streamlit URL after first deploy.
         value: '["*"]'
+      - key: API_SECRET_KEY
+        # Set this in the Render dashboard — used as the X-API-Key header value.
+        sync: false
 
 databases:
   - name: hiretrack-db

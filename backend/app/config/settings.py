@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501"]
 
+    # Personal-use API key (optional — leave empty to disable auth in development)
+    api_secret_key: str = ""
+
     @field_validator("database_url", mode="before")
     @classmethod
     def normalize_database_url(cls, v: str) -> str:
