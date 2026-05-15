@@ -85,6 +85,27 @@ class Settings(BaseSettings):
     port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501"]
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        """Ensure the database URL always uses the asyncpg driver.
+
+        Render's managed Postgres injects a plain ``postgresql://`` connection
+        string (psycopg2 scheme).  SQLAlchemy's async engine requires the
+        ``postgresql+asyncpg://`` scheme, so we normalise it here once for all
+        consumers (the engine in session.py, Alembic env.py, etc.).
+        """
+        sync_to_async = {
+            "postgresql+psycopg2://": "postgresql+asyncpg://",
+            "postgres+psycopg2://": "postgresql+asyncpg://",
+            "postgresql://": "postgresql+asyncpg://",
+            "postgres://": "postgresql+asyncpg://",
+        }
+        for sync_scheme, async_scheme in sync_to_async.items():
+            if v.startswith(sync_scheme):
+                return async_scheme + v[len(sync_scheme):]
+        return v
+
     @field_validator("min_ats_score")
     @classmethod
     def validate_min_ats_score(cls, v: float) -> float:
