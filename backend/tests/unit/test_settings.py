@@ -2,7 +2,7 @@
 
 
 
-from app.config.settings import ApplyMode, BrowserSettings, Environment, LLMSettings, Settings
+from app.config.settings import ApplyMode, Environment, LLMSettings, Settings
 
 
 class TestSettings:
@@ -60,18 +60,3 @@ class TestLLMSettings:
         assert settings.preferred_provider == "openai"
 
 
-class TestBrowserSettings:
-    """Test browser settings validation."""
-
-    def test_max_parallel_clamped_to_valid_range(self) -> None:
-        """Max parallel sessions should be clamped to 1-5."""
-        settings = BrowserSettings(max_parallel=10)
-        assert settings.max_parallel == 5
-
-        settings = BrowserSettings(max_parallel=0)
-        assert settings.max_parallel == 1
-
-    def test_default_headless_is_true(self) -> None:
-        """Browser should default to headless mode."""
-        settings = BrowserSettings()
-        assert settings.headless is True

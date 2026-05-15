@@ -1,6 +1,5 @@
 from app.config.settings import (
     ApplyMode,
-    BrowserSettings,
     Environment,
     LLMSettings,
     Settings,
@@ -9,7 +8,6 @@ from app.config.settings import (
 
 __all__ = [
     "ApplyMode",
-    "BrowserSettings",
     "Environment",
     "LLMSettings",
     "Settings",
