@@ -13,9 +13,22 @@ from app.models import Base
 # Alembic Config object
 config = context.config
 
-# Allow DATABASE_URL env var to override the ini-file value
+# Allow DATABASE_URL env var to override the ini-file value.
+# Render's managed Postgres injects a plain "postgresql://" connection string,
+# but async_engine_from_config requires the "asyncpg" driver scheme.
+# Normalize any of the common sync schemes to their async equivalent here.
 _db_url = os.getenv("DATABASE_URL")
 if _db_url:
+    # Replace sync driver schemes with asyncpg equivalents
+    for _sync_scheme, _async_scheme in (
+        ("postgresql+psycopg2://", "postgresql+asyncpg://"),
+        ("postgres+psycopg2://", "postgresql+asyncpg://"),
+        ("postgresql://", "postgresql+asyncpg://"),
+        ("postgres://", "postgresql+asyncpg://"),
+    ):
+        if _db_url.startswith(_sync_scheme):
+            _db_url = _async_scheme + _db_url[len(_sync_scheme):]
+            break
     config.set_main_option("sqlalchemy.url", _db_url)
 
 # Interpret the config file for Python logging
