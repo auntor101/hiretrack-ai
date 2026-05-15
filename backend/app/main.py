@@ -126,6 +126,16 @@ def create_app() -> FastAPI:
     app.include_router(v1_router, prefix=API_V1_PREFIX)
     app.include_router(ws_router)
 
+    @app.get("/")
+    async def root() -> dict[str, str]:
+        """Root endpoint with API info."""
+        return {
+            "name": APP_TITLE,
+            "version": APP_VERSION,
+            "health": "/health",
+            "docs": "/docs" if settings.environment != Environment.PRODUCTION else "disabled in production",
+        }
+
     @app.get("/health")
     async def health_check() -> dict[str, str]:
         """Health check endpoint."""
