@@ -8,8 +8,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import plotly.graph_objects as go
 import streamlit as st
+try:
+    import plotly.graph_objects as go
+    _PLOTLY = True
+except Exception:
+    _PLOTLY = False
 from utils import api_get
 from ht_components import (
     inject_global_css, page_header, section_header,
@@ -66,13 +70,14 @@ with col_l:
     if active:
         stages = [d["stage"].replace("_", " ").title() for d in active]
         counts = [d["count"] for d in active]
-        fig = go.Figure(go.Funnel(
-            y=stages, x=counts,
-            textinfo="value+percent initial",
-            marker=dict(color=HT_CHART_COLORS[:len(stages)]),
-            connector=dict(line=dict(color=HT_COLORS["line"], width=1)),
-        ))
-        st.plotly_chart(style_plotly(fig, 300), use_container_width=True)
+        if _PLOTLY:
+            fig = go.Figure(go.Funnel(y=stages, x=counts, textinfo="value+percent initial",
+                                      marker=dict(color=HT_CHART_COLORS[:len(stages)]),
+                                      connector=dict(line=dict(color=HT_COLORS["line"], width=1))))
+            st.plotly_chart(style_plotly(fig, 300), use_container_width=True)
+        else:
+            import pandas as pd
+            st.bar_chart(pd.DataFrame({"Stage": stages, "Count": counts}).set_index("Stage"))
     else:
         info_box("No funnel data yet — applications will appear here as they're created.")
 
@@ -80,37 +85,39 @@ with col_r:
     if ats_data:
         labels = [d["range_label"] for d in ats_data]
         counts = [d["count"] for d in ats_data]
-        fig = go.Figure(go.Bar(
-            x=labels, y=counts,
-            marker_color=["#DC2626", "#D97706", "#D97706", "#059669", "#059669"],
-            text=counts, textposition="outside",
-            hovertemplate="%{x}: %{y} applications<extra></extra>",
-        ))
-        fig.update_traces(marker_line_width=0)
-        st.plotly_chart(style_plotly(fig, 300), use_container_width=True)
+        if _PLOTLY:
+            fig = go.Figure(go.Bar(x=labels, y=counts,
+                                   marker_color=["#DC2626","#D97706","#D97706","#059669","#059669"],
+                                   text=counts, textposition="outside"))
+            fig.update_traces(marker_line_width=0)
+            st.plotly_chart(style_plotly(fig, 300), use_container_width=True)
+        else:
+            import pandas as pd
+            st.bar_chart(pd.DataFrame({"Score": labels, "Count": counts}).set_index("Score"))
     else:
         info_box("No ATS score data yet.")
 
 # ── Timeline ──────────────────────────────────────────────────────────────────
 section_header("Daily Activity", "last 30 days")
 if timeline:
+    import pandas as pd
     dates = [d["date"] for d in timeline]
-    fig = go.Figure()
-    series = [
-        ("Jobs Found",    [d.get("jobs_found", 0) for d in timeline],              HT_COLORS["blue_500"]),
-        ("Apps Created",  [d.get("applications_created", 0) for d in timeline],    HT_COLORS["violet_500"]),
-        ("Applied",       [d.get("applications_applied", 0) for d in timeline],    HT_COLORS["success"]),
-    ]
-    for name, vals, color in series:
-        fig.add_trace(go.Scatter(
-            x=dates, y=vals, name=name,
-            mode="lines+markers",
-            line=dict(color=color, width=2.5),
-            marker=dict(size=4),
-            fill="tozeroy",
-            fillcolor=color.replace("#", "rgba(").rstrip(")") + ",0.05)" if color.startswith("#") else color,
-        ))
-    st.plotly_chart(style_plotly(fig, 260), use_container_width=True)
+    if _PLOTLY:
+        fig = go.Figure()
+        for name, vals, color in [
+            ("Jobs Found",   [d.get("jobs_found",0) for d in timeline],           HT_COLORS["blue_500"]),
+            ("Apps Created", [d.get("applications_created",0) for d in timeline], HT_COLORS["violet_500"]),
+            ("Applied",      [d.get("applications_applied",0) for d in timeline], HT_COLORS["success"]),
+        ]:
+            fig.add_trace(go.Scatter(x=dates, y=vals, name=name, mode="lines+markers",
+                                     line=dict(color=color, width=2.5), marker=dict(size=4),
+                                     fill="tozeroy"))
+        st.plotly_chart(style_plotly(fig, 260), use_container_width=True)
+    else:
+        df_t = pd.DataFrame({"Date": dates, "Jobs Found": [d.get("jobs_found",0) for d in timeline],
+                              "Apps Created": [d.get("applications_created",0) for d in timeline],
+                              "Applied": [d.get("applications_applied",0) for d in timeline]}).set_index("Date")
+        st.line_chart(df_t)
 else:
     info_box("No timeline data yet.")
 
@@ -123,15 +130,14 @@ with col_a:
     if by_status:
         labels = [k.replace("_", " ").title() for k in by_status]
         values = list(by_status.values())
-        colors = [HT_STATUS.get(k, {}).get("color", "#64748B") for k in by_status]
-        fig = go.Figure(go.Pie(
-            labels=labels, values=values,
-            hole=0.52,
-            marker=dict(colors=colors),
-            textinfo="label+percent",
-            hovertemplate="%{label}: %{value}<extra></extra>",
-        ))
-        st.plotly_chart(style_plotly(fig, 280), use_container_width=True)
+        if _PLOTLY:
+            colors = [HT_STATUS.get(k, {}).get("color", "#64748B") for k in by_status]
+            fig = go.Figure(go.Pie(labels=labels, values=values, hole=0.52,
+                                   marker=dict(colors=colors), textinfo="label+percent"))
+            st.plotly_chart(style_plotly(fig, 280), use_container_width=True)
+        else:
+            import pandas as pd
+            st.bar_chart(pd.DataFrame({"Status": labels, "Count": values}).set_index("Status"))
     else:
         info_box("No application data yet.")
 
@@ -140,23 +146,16 @@ with col_b:
     if missing:
         skill_names  = [s.get("skill", "") for s in missing[:10]]
         skill_counts = [s.get("count", 0) for s in missing[:10]]
-        fig = go.Figure(go.Bar(
-            x=skill_counts, y=skill_names,
-            orientation="h",
-            marker=dict(
-                color=HT_COLORS["error"],
-                opacity=0.85,
-                line=dict(color="white", width=1),
-            ),
-            text=skill_counts, textposition="outside",
-        ))
-        fig.update_layout(yaxis=dict(autorange="reversed"))
-        st.plotly_chart(style_plotly(fig, 280), use_container_width=True)
-
-        # Skill gap chips
-        st.markdown(
-            skill_tags_html(skill_names, missing=skill_names),
-            unsafe_allow_html=True,
-        )
+        if _PLOTLY:
+            fig = go.Figure(go.Bar(x=skill_counts, y=skill_names, orientation="h",
+                                   marker=dict(color=HT_COLORS["error"], opacity=0.85,
+                                               line=dict(color="white", width=1)),
+                                   text=skill_counts, textposition="outside"))
+            fig.update_layout(yaxis=dict(autorange="reversed"))
+            st.plotly_chart(style_plotly(fig, 280), use_container_width=True)
+        else:
+            import pandas as pd
+            st.bar_chart(pd.DataFrame({"Skill": skill_names, "Gap Count": skill_counts}).set_index("Skill"))
+        st.markdown(skill_tags_html(skill_names, missing=skill_names), unsafe_allow_html=True)
     else:
         info_box("Run skill gap analyses on your applications to see missing skills here.")
