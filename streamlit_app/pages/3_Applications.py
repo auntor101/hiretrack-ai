@@ -85,7 +85,7 @@ items = data.get("items", [])
 total = data.get("total", 0)
 
 # Job lookup map
-jobs_data = api_get("/jobs/", params={"page_size": 200}) or {}
+jobs_data = api_get("/jobs/", params={"page_size": 100}) or {}
 job_map   = {j["id"]: j for j in jobs_data.get("items", [])}
 
 st.markdown(

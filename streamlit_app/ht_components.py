@@ -330,10 +330,12 @@ def inject_global_css() -> None:
             margin: 0 0 12px;
         }
         .ht-hero-gradient {
-            background: linear-gradient(90deg, #378FE9, #A78BFA);
+            background: linear-gradient(90deg, #378FE9 0%, #A78BFA 40%, #38BDF8 70%, #378FE9 100%);
+            background-size: 200% auto;
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            animation: htGradShimmer 5s linear infinite;
         }
         .ht-hero-sub {
             font-size: 15px;
@@ -510,10 +512,120 @@ def inject_global_css() -> None:
             background: linear-gradient(90deg, #0A66C2, #378FE9) !important;
             border-radius: 999px !important;
         }
+
+        /* ── Sidebar dark skin ───────────────────────────────────────── */
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg,#0C1526 0%,#0F172A 55%,#1A1035 100%) !important;
+            border-right: 1px solid rgba(255,255,255,0.06) !important;
+        }
+        section[data-testid="stSidebar"] * {
+            color: rgba(255,255,255,0.75) !important;
+        }
+        [data-testid="stSidebarNav"] ul {
+            padding: 0 8px !important;
+            gap: 2px !important;
+        }
+        [data-testid="stSidebarNav"] a {
+            border-radius: 10px !important;
+            padding: 9px 14px !important;
+            font-size: 13.5px !important;
+            font-weight: 500 !important;
+            color: rgba(255,255,255,0.58) !important;
+            transition: background 180ms ease, color 180ms ease !important;
+        }
+        [data-testid="stSidebarNav"] a:hover {
+            background: rgba(255,255,255,0.07) !important;
+            color: rgba(255,255,255,0.92) !important;
+        }
+        [data-testid="stSidebarNav"] [aria-current="page"] a {
+            background: linear-gradient(135deg,
+                rgba(10,102,194,0.28) 0%,
+                rgba(55,143,233,0.16) 100%) !important;
+            color: #93C5FD !important;
+            font-weight: 600 !important;
+            border-left: 2px solid #378FE9 !important;
+        }
+        .ht-sidebar-brand {
+            padding: 22px 16px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            margin-bottom: 8px;
+        }
+        .ht-sidebar-logo {
+            font-size: 32px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+        .ht-sidebar-name {
+            font-size: 18px !important;
+            font-weight: 800 !important;
+            color: white !important;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        .ht-sidebar-tagline {
+            font-size: 10px !important;
+            font-weight: 500 !important;
+            color: rgba(255,255,255,0.36) !important;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        .ht-sidebar-pill {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(10,102,194,0.35), rgba(124,58,237,0.35));
+            border: 1px solid rgba(55,143,233,0.3);
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            color: #93C5FD !important;
+            letter-spacing: 0.04em;
+            margin-top: 8px;
+        }
+
+        /* ── Animations ──────────────────────────────────────────────── */
+        @keyframes htFadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes htGradShimmer {
+            0%   { background-position: 0% center; }
+            100% { background-position: -200% center; }
+        }
+        @keyframes htPulseGlow {
+            0%,100% { box-shadow: 0 0 0 0 rgba(10,102,194,0); }
+            50%      { box-shadow: 0 0 0 8px rgba(10,102,194,0.10); }
+        }
+        @keyframes htSlideInLeft {
+            from { opacity: 0; transform: translateX(-12px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        .ht-hero { animation: htFadeUp 0.55s cubic-bezier(0.16,1,0.3,1) both; }
+        .ht-kpi  {
+            animation: htFadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both;
+            animation-delay: 0.07s;
+        }
+        .ht-job  { animation: htFadeUp 0.40s cubic-bezier(0.16,1,0.3,1) both; }
+        .ht-app  { animation: htFadeUp 0.38s cubic-bezier(0.16,1,0.3,1) both; }
+        .ht-info { animation: htFadeUp 0.30s ease both; }
+        .ht-ai   { animation: htFadeUp 0.35s ease both; }
+        .ht-sidebar-brand { animation: htSlideInLeft 0.4s cubic-bezier(0.16,1,0.3,1) both; }
         </style>
         """,
         unsafe_allow_html=True,
     )
+    with st.sidebar:
+        st.markdown(
+            """
+            <div class="ht-sidebar-brand">
+                <div class="ht-sidebar-logo">✦</div>
+                <div class="ht-sidebar-name">HireTrack AI</div>
+                <div class="ht-sidebar-tagline">AI-Powered Job Pipeline</div>
+                <div class="ht-sidebar-pill">BETA</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ── Component helpers ─────────────────────────────────────────────────────────
