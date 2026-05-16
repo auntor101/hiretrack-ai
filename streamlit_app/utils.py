@@ -56,48 +56,70 @@ JOB_TYPE_LABELS: dict[str, str] = {
 }
 
 
+def _backend_warning(kind: str) -> None:
+    if kind == "timeout":
+        st.warning(
+            "⏳ **Backend is warming up** — Render free tier sleeps after inactivity. "
+            "Wait 30 seconds then **reload the page**.",
+            icon="🔄",
+        )
+    elif kind == "conn":
+        st.warning(
+            "🔴 **Cannot reach the backend.** "
+            f"Check that `API_BASE_URL` is set correctly in Streamlit secrets. "
+            f"Current value: `{API_BASE}`",
+            icon="⚠️",
+        )
+
+
 def api_get(path: str, params: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.get(url, params=params, headers=_auth_headers(), timeout=15)
+        r = requests.get(url, params=params, headers=_auth_headers(), timeout=60)
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.Timeout:
+        _backend_warning("timeout")
+        return None
     except requests.exceptions.ConnectionError:
-        st.error(
-            "\U0001f534 Cannot connect to the backend. "
-            "Make sure FastAPI is running on port 8000."
-        )
-        st.stop()
+        _backend_warning("conn")
+        return None
     except requests.exceptions.HTTPError as e:
-        st.error(f"API error {e.response.status_code}: {e.response.text[:200]}")
+        st.warning(f"API error {e.response.status_code}: {e.response.text[:200]}")
         return None
 
 
 def api_post(path: str, json: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.post(url, json=json or {}, headers=_auth_headers(), timeout=30)
+        r = requests.post(url, json=json or {}, headers=_auth_headers(), timeout=90)
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.Timeout:
+        _backend_warning("timeout")
+        return None
     except requests.exceptions.ConnectionError:
-        st.error("\U0001f534 Cannot connect to the backend.")
+        _backend_warning("conn")
         return None
     except requests.exceptions.HTTPError as e:
-        st.error(f"API error: {e.response.text[:200]}")
+        st.warning(f"API error: {e.response.text[:200]}")
         return None
 
 
 def api_put(path: str, json: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.put(url, json=json or {}, headers=_auth_headers(), timeout=15)
+        r = requests.put(url, json=json or {}, headers=_auth_headers(), timeout=60)
         r.raise_for_status()
         return r.json()
+    except requests.exceptions.Timeout:
+        _backend_warning("timeout")
+        return None
     except requests.exceptions.ConnectionError:
-        st.error("\U0001f534 Cannot connect to the backend.")
+        _backend_warning("conn")
         return None
     except requests.exceptions.HTTPError as e:
-        st.error(f"API error: {e.response.text[:200]}")
+        st.warning(f"API error: {e.response.text[:200]}")
         return None
 
 

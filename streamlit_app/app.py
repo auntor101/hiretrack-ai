@@ -8,8 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import requests
 import streamlit as st
-from utils import api_get
+from utils import API_BASE, api_get, _auth_headers
 from ht_components import (
     inject_global_css, dark_hero, section_header,
     kpi_row, info_box, job_card_html,
@@ -23,6 +24,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_global_css()
+
+# ── Wake-up ping (non-blocking) ───────────────────────────────────────────────
+# Render free tier sleeps; hit /health first so it starts warming up
+# before the heavier API calls below.
+try:
+    requests.get(f"{API_BASE.rstrip('/api/v1').rstrip('/')}/health",
+                 headers=_auth_headers(), timeout=3)
+except Exception:
+    pass  # expected on cold start — heavier calls will retry with 60s timeout
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 stats = api_get("/dashboard/stats") or {}
