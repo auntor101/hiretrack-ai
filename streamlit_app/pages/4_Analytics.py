@@ -1,4 +1,6 @@
-"""Analytics page -- deep-dive charts and LLM usage."""
+"""Analytics page — deep-dive charts and LLM usage.
+Drop-in replacement: uses ht_components for branded visuals.
+"""
 from __future__ import annotations
 
 import sys
@@ -8,180 +10,123 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import plotly.graph_objects as go
 import streamlit as st
-from utils import api_get, inject_global_css
+from utils import api_get
+from ht_components import (
+    inject_global_css, page_header, section_header,
+    kpi_row, style_plotly, info_box,
+    HT_COLORS, HT_CHART_COLORS,
+)
 
 st.set_page_config(
-    page_title="Analytics \u00b7 AutoApply AI",
-    page_icon="\U0001f4c8",
+    page_title="Analytics · HireTrack AI",
+    page_icon="📈",
     layout="wide",
 )
 inject_global_css()
-
-st.markdown('<div class="page-title">\U0001f4c8 Analytics</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="page-subtitle">Deep-dive into your job search performance metrics</div>',
-    unsafe_allow_html=True,
-)
+page_header("Analytics", "Deep-dive into your job search performance metrics.")
 
 # ── Data ──────────────────────────────────────────────────────────────────────
-stats = api_get("/analytics/dashboard") or {}
-funnel_data = api_get("/analytics/funnel") or []
+stats    = api_get("/analytics/dashboard") or {}
+funnel   = api_get("/analytics/funnel") or []
 ats_data = api_get("/analytics/ats-scores") or []
-timeline_data = api_get("/analytics/timeline") or []
+timeline = api_get("/analytics/timeline") or []
 llm_data = api_get("/analytics/llm-usage") or []
 
-# ── Summary metrics ────────────────────────────────────────────────────────────
-m1, m2, m3, m4 = st.columns(4)
+# ── KPIs ──────────────────────────────────────────────────────────────────────
 total_cost = stats.get("total_llm_cost_usd", 0) or 0
-metrics_row = [
-    (m1, stats.get("total_jobs_found", 0), "Total Jobs", "#0A66C2"),
-    (m2, stats.get("total_applications", 0), "Total Applications", "#06B6D4"),
-    (m3, f"{stats.get('avg_ats_score', 0):.1%}", "Avg ATS Score", "#8B5CF6"),
-    (m4, f"${total_cost:.4f}", "LLM Cost (USD)", "#F59E0B"),
-]
-for col, val, label, color in metrics_row:
-    col.markdown(
-        f"""<div class="kpi-card" style="border-top-color:{color}">
-            <div class="kpi-value" style="font-size:28px">{val}</div>
-            <div class="kpi-label">{label}</div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
+kpi_row([
+    {"value": stats.get("total_jobs_found", 0),     "label": "Total Jobs",       "icon": "💼", "color": HT_COLORS["blue_500"]},
+    {"value": stats.get("total_applications", 0),   "label": "Applications",     "icon": "📋", "color": HT_COLORS["violet_500"]},
+    {"value": f"{stats.get('avg_ats_score', 0):.1%}", "label": "Avg ATS Score",  "icon": "📈", "color": HT_COLORS["warning"]},
+    {"value": f"${total_cost:.4f}",                  "label": "LLM Cost (USD)",   "icon": "💰", "color": HT_COLORS["success"]},
+])
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
 
-# ── Funnel + ATS ───────────────────────────────────────────────────────────────
+# ── Funnel + ATS ──────────────────────────────────────────────────────────────
+section_header("Application Funnel & ATS Distribution")
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown('<div class="section-title">Application Funnel</div>', unsafe_allow_html=True)
-    active = [d for d in funnel_data if d["count"] > 0]
+    active = [d for d in funnel if d["count"] > 0]
     if active:
-        stage_labels = [d["stage"].replace("_", " ").title() for d in active]
-        stage_vals = [d["count"] for d in active]
-        # Funnel chart
         fig = go.Figure(go.Funnel(
-            y=stage_labels,
-            x=stage_vals,
+            y=[d["stage"].replace("_", " ").title() for d in active],
+            x=[d["count"] for d in active],
             textinfo="value+percent initial",
-            marker=dict(color=[
-                "#0A66C2", "#06B6D4", "#3B82F6", "#6366F1",
-                "#8B5CF6", "#10B981", "#22C55E", "#EF4444", "#9CA3AF",
-            ][: len(active)]),
-            connector=dict(line=dict(color="#E5E7EB", width=1)),
+            marker=dict(color=HT_CHART_COLORS[:len(active)]),
+            connector=dict(line=dict(color=HT_COLORS["line"], width=1)),
         ))
-        fig.update_layout(
-            height=320, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(family="sans-serif", size=13),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(style_plotly(fig, 320), use_container_width=True)
     else:
-        st.info("No funnel data yet.")
+        info_box("No funnel data yet.")
 
 with col2:
-    st.markdown('<div class="section-title">ATS Score Distribution</div>', unsafe_allow_html=True)
     if ats_data:
-        ats_labels = [d["range_label"] for d in ats_data]
-        ats_counts = [d["count"] for d in ats_data]
         fig = go.Figure(go.Bar(
-            x=ats_labels,
-            y=ats_counts,
+            x=[d["range_label"] for d in ats_data],
+            y=[d["count"] for d in ats_data],
             marker=dict(
-                color=["#EF4444", "#F97316", "#F59E0B", "#22C55E", "#16A34A"],
+                color=["#DC2626", "#D97706", "#D97706", "#059669", "#059669"],
                 line=dict(color="white", width=1),
             ),
-            text=ats_counts,
+            text=[d["count"] for d in ats_data],
             textposition="outside",
-            hovertemplate="Score %{x}: %{y} apps<extra></extra>",
         ))
-        fig.update_layout(
-            height=320, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(title="ATS Score %", gridcolor="#F3F4F6"),
-            yaxis=dict(title="Applications", gridcolor="#F3F4F6"),
-            font=dict(family="sans-serif", size=13),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(style_plotly(fig, 320), use_container_width=True)
     else:
-        st.info("No ATS data yet.")
+        info_box("No ATS data yet.")
 
-# ── Timeline ───────────────────────────────────────────────────────────────────
-st.markdown('<div class="section-title">Daily Activity Timeline</div>', unsafe_allow_html=True)
-if timeline_data:
-    dates = [d["date"] for d in timeline_data]
-    fig = go.Figure()
-    series = [
-        ("Jobs Found", [d.get("jobs_found", 0) for d in timeline_data], "#0A66C2"),
-        ("Apps Created", [d.get("applications_created", 0) for d in timeline_data], "#06B6D4"),
-        ("Applied", [d.get("applications_applied", 0) for d in timeline_data], "#22C55E"),
-    ]
-    for name, values, color in series:
+# ── Timeline ──────────────────────────────────────────────────────────────────
+section_header("Daily Activity Timeline")
+if timeline:
+    dates = [d["date"] for d in timeline]
+    fig   = go.Figure()
+    for name, key, color in [
+        ("Jobs Found",   "jobs_found",            HT_COLORS["blue_500"]),
+        ("Apps Created", "applications_created",  HT_COLORS["violet_500"]),
+        ("Applied",      "applications_applied",  HT_COLORS["success"]),
+    ]:
         fig.add_trace(go.Scatter(
-            x=dates, y=values, name=name,
-            mode="lines+markers",
-            line=dict(color=color, width=2),
-            marker=dict(size=5),
+            x=dates, y=[d.get(key, 0) for d in timeline],
+            name=name, mode="lines+markers",
+            line=dict(color=color, width=2.5),
+            marker=dict(size=4),
         ))
-    fig.update_layout(
-        height=280, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", y=1.12),
-        xaxis=dict(gridcolor="#F3F4F6"),
-        yaxis=dict(gridcolor="#F3F4F6"),
-        font=dict(family="sans-serif", size=12),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(style_plotly(fig, 280), use_container_width=True)
 else:
-    st.info("No timeline data yet.")
+    info_box("No timeline data yet.")
 
 # ── LLM Usage ─────────────────────────────────────────────────────────────────
-st.markdown(
-    '<div class="section-title">LLM Usage &amp; Cost Breakdown</div>',
-    unsafe_allow_html=True,
-)
+section_header("LLM Usage & Cost")
 if llm_data:
     import pandas as pd
 
     df = pd.DataFrame(llm_data)
-    rename_map = {
-        "provider": "Provider",
-        "model": "Model",
+    df = df.rename(columns={
+        "provider":       "Provider",
+        "model":          "Model",
         "total_requests": "Requests",
-        "total_tokens": "Total Tokens",
+        "total_tokens":   "Total Tokens",
         "total_cost_usd": "Cost (USD)",
-        "avg_latency_ms": "Avg Latency (ms)",
-    }
-    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        "avg_latency_ms": "Avg Latency",
+    })
     if "Cost (USD)" in df.columns:
         df["Cost (USD)"] = df["Cost (USD)"].map("${:.6f}".format)
     if "Total Tokens" in df.columns:
         df["Total Tokens"] = df["Total Tokens"].map("{:,}".format)
-    if "Avg Latency (ms)" in df.columns:
-        df["Avg Latency (ms)"] = df["Avg Latency (ms)"].map("{:.0f} ms".format)
+    if "Avg Latency" in df.columns:
+        df["Avg Latency"] = df["Avg Latency"].map("{:.0f} ms".format)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # Cost bar chart
     if len(llm_data) > 1:
-        providers = [d.get("provider", "") for d in llm_data]
-        costs = [float(d.get("total_cost_usd", 0)) for d in llm_data]
         fig = go.Figure(go.Bar(
-            x=providers,
-            y=costs,
-            marker_color="#0A66C2",
-            text=[f"${c:.6f}" for c in costs],
+            x=[d.get("provider", "") for d in llm_data],
+            y=[float(d.get("total_cost_usd", 0)) for d in llm_data],
+            marker_color=HT_COLORS["blue_500"],
+            text=[f"${float(d.get('total_cost_usd',0)):.6f}" for d in llm_data],
             textposition="outside",
         ))
-        fig.update_layout(
-            height=220, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(title="Cost USD", gridcolor="#F3F4F6"),
-            font=dict(family="sans-serif", size=12),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(style_plotly(fig, 220), use_container_width=True)
 else:
-    st.markdown(
-        '<div class="info-box">No LLM usage recorded yet. Generate cover letters or '
-        "run job analysis to see usage here.</div>",
-        unsafe_allow_html=True,
-    )
+    info_box("No LLM usage recorded yet. Generate cover letters or run job analysis to see usage here.")

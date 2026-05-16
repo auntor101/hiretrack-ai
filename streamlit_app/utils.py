@@ -10,6 +10,10 @@ import streamlit as st
 
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
 
+def _auth_headers() -> dict[str, str]:
+    key = st.secrets.get("API_SECRET_KEY", "") or os.getenv("API_SECRET_KEY", "")
+    return {"X-API-Key": key} if key else {}
+
 STATUS_COLORS: dict[str, str] = {
     "queued": "#6B7280",
     "pending_review": "#F59E0B",
@@ -55,7 +59,7 @@ JOB_TYPE_LABELS: dict[str, str] = {
 def api_get(path: str, params: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = requests.get(url, params=params, headers=_auth_headers(), timeout=15)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError:
@@ -72,7 +76,7 @@ def api_get(path: str, params: dict | None = None) -> Any:
 def api_post(path: str, json: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.post(url, json=json or {}, timeout=30)
+        r = requests.post(url, json=json or {}, headers=_auth_headers(), timeout=30)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError:
@@ -86,7 +90,7 @@ def api_post(path: str, json: dict | None = None) -> Any:
 def api_put(path: str, json: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
-        r = requests.put(url, json=json or {}, timeout=15)
+        r = requests.put(url, json=json or {}, headers=_auth_headers(), timeout=15)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError:

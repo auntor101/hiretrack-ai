@@ -1,0 +1,20 @@
+[theme]
+# HireTrack AI — brand-exact theme tokens
+# Matches frontend/src/theme.ts and colors_and_type.css
+
+primaryColor         = "#0A66C2"   # --ht-blue-500
+backgroundColor      = "#F0F4FA"   # --ht-canvas  (cool off-white, not pure grey)
+secondaryBackgroundColor = "#FFFFFF"  # --ht-paper
+textColor            = "#0F172A"   # --ht-ink
+
+# Inter is loaded via ht_components.py inject_global_css(); Streamlit's "sans serif"
+# picks up the system stack — acceptable fallback before the font loads.
+font = "sans serif"
+
+[server]
+headless = true
+port     = 8501
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
