@@ -106,6 +106,28 @@ def api_post(path: str, json: dict | None = None) -> Any:
         return None
 
 
+def api_upload(path: str, file_bytes: bytes, filename: str, content_type: str) -> Any:
+    url = f"{API_BASE}/{path.lstrip('/')}"
+    try:
+        r = requests.post(
+            url,
+            files={"file": (filename, file_bytes, content_type)},
+            headers=_auth_headers(),
+            timeout=60,
+        )
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.Timeout:
+        _backend_warning("timeout")
+        return None
+    except requests.exceptions.ConnectionError:
+        _backend_warning("conn")
+        return None
+    except requests.exceptions.HTTPError as e:
+        st.warning(f"Upload error: {e.response.text[:200]}")
+        return None
+
+
 def api_put(path: str, json: dict | None = None) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
