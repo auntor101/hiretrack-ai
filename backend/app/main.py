@@ -83,7 +83,15 @@ def create_app() -> FastAPI:
     # Security headers — applied on every response in production
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Response:
-        response: Response = await call_next(request)
+        try:
+            response: Response = await call_next(request)
+        except Exception:
+            logger.exception("unhandled_request_error", path=str(request.url))
+            response = Response(
+                content='{"detail":"Internal server error"}',
+                status_code=500,
+                media_type="application/json",
+            )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("X-XSS-Protection", "0")

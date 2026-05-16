@@ -133,20 +133,23 @@ def api_get(path: str, params: dict | None = None) -> Any:
         return None
 
 
-def api_post(path: str, json: dict | None = None) -> Any:
+def api_post(path: str, json: dict | None = None, silent: bool = False) -> Any:
     url = f"{API_BASE}/{path.lstrip('/')}"
     try:
         r = requests.post(url, json=json or {}, headers=_auth_headers(), timeout=90)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.Timeout:
-        _backend_warning("timeout")
+        if not silent:
+            _backend_warning("timeout")
         return None
     except requests.exceptions.ConnectionError:
-        _backend_warning("conn")
+        if not silent:
+            _backend_warning("conn")
         return None
     except requests.exceptions.HTTPError as e:
-        st.warning(f"API error: {e.response.text[:200]}")
+        if not silent:
+            st.warning(f"API error {e.response.status_code}: {e.response.text[:120]}")
         return None
 
 

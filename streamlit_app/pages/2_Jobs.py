@@ -57,20 +57,30 @@ with st.expander("🌱 Load Demo Job Data", expanded=False):
     col_seed, col_info = st.columns([1, 2])
     with col_seed:
         if st.button("🚀 Create 20 Demo Jobs", type="primary", use_container_width=True):
+            import time as _t
             progress = st.progress(0, text="Creating jobs…")
             created, failed = 0, 0
             for i, job in enumerate(DEMO_JOBS):
-                res = api_post("/jobs/", job)
+                res = api_post("/jobs/", job, silent=True)
+                if res is None:
+                    _t.sleep(1)           # brief pause then retry once
+                    res = api_post("/jobs/", job, silent=True)
                 if res:
                     created += 1
                 else:
                     failed += 1
-                progress.progress((i + 1) / len(DEMO_JOBS), text=f"Creating job {i+1}/{len(DEMO_JOBS)}…")
+                progress.progress((i + 1) / len(DEMO_JOBS), text=f"Job {i+1}/{len(DEMO_JOBS)}…")
+                _t.sleep(0.25)            # avoid overwhelming Render's DB pool
             progress.empty()
             if created:
                 info_box(f"✅ Created {created} demo jobs! Refresh the page to see them.", kind="success")
             if failed:
-                info_box(f"⚠️ {failed} jobs failed (may already exist).", kind="warning")
+                st.warning(
+                    f"⚠️ **{failed} jobs failed.** "
+                    "If the backend just woke up, wait 30 s and click again — already-existing jobs "
+                    "are skipped automatically.",
+                    icon="⚠️",
+                )
     with col_info:
         info_box(
             "Includes roles across: Backend, Frontend, Data Science, ML, DevOps, SRE, "

@@ -96,15 +96,17 @@ async def create_job(db: AsyncSession, data: dict[str, Any]) -> Job:
     """Manually create a job listing."""
     job = Job(
         platform=data.get("platform", "manual"),
-        platform_job_id=data.get("platform_job_id", ""),
+        platform_job_id=data.get("platform_job_id") or "",
         title=data["title"],
         company=data["company"],
-        location=data.get("location"),
-        url=data.get("url", ""),
-        description=data.get("description"),
+        location=data.get("location") or "",
+        url=data.get("url") or "",
+        description=data.get("description") or "",
         salary_range=data.get("salary_range"),
         job_type=data.get("job_type"),
         remote=data.get("remote", False),
+        experience_level=data.get("experience_level"),
+        skills_required=data.get("skills_required"),
         status="new",
     )
     db.add(job)
