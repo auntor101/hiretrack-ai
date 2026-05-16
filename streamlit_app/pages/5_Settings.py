@@ -27,7 +27,7 @@ page_header("Settings", "Configure your HireTrack AI pipeline.")
 settings  = api_get("/settings") or {}
 providers = api_get("/settings/llm-providers") or []
 
-tab1, tab2, tab3 = st.tabs(["🤖 Pipeline", "🔑 LLM Providers", "👤 Candidate Profile"])
+tab1, tab2, tab3, tab4 = st.tabs(["🤖 Pipeline", "🔑 LLM Providers", "👤 Candidate Profile", "📄 Templates"])
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 with tab1:
@@ -175,3 +175,72 @@ with tab3:
         })
         if res:
             info_box("Profile saved.", kind="success")
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+with tab4:
+    RESUME_TEMPLATES = [
+        {"id": "modern",    "icon": "🎨", "name": "Modern",    "desc": "Clean lines, blue accent sidebar, skills panel"},
+        {"id": "classic",   "icon": "📰", "name": "Classic",   "desc": "Traditional layout, highly ATS-optimised"},
+        {"id": "creative",  "icon": "✨", "name": "Creative",  "desc": "Bold header, visual skill bars, colour accents"},
+        {"id": "executive", "icon": "💼", "name": "Executive", "desc": "Sophisticated two-column, leadership focus"},
+        {"id": "minimal",   "icon": "⬜", "name": "Minimal",   "desc": "Ultra-clean typography, no distractions"},
+    ]
+    CL_TEMPLATES = [
+        {"id": "standard",  "icon": "📝", "name": "Standard",  "desc": "Professional and versatile for any industry"},
+        {"id": "technical", "icon": "💻", "name": "Technical", "desc": "Highlights tech skills, metrics-forward"},
+        {"id": "creative",  "icon": "🎭", "name": "Creative",  "desc": "Expressive tone for design & creative roles"},
+    ]
+
+    cur_rtpl = st.session_state.get("default_resume_template", "modern")
+    cur_cltpl = st.session_state.get("default_cl_template", "standard")
+
+    section_header("Resume Template")
+    rcols = st.columns(5)
+    for col, tpl in zip(rcols, RESUME_TEMPLATES):
+        is_sel = tpl["id"] == cur_rtpl
+        col.markdown(
+            f"""<div style="background:{'rgba(10,102,194,0.08)' if is_sel else 'white'};
+                border:2px solid {'#0A66C2' if is_sel else '#E2E8F0'};
+                border-radius:14px;padding:18px 12px;text-align:center;
+                transition:all 200ms ease;margin-bottom:8px">
+                <div style="font-size:28px;margin-bottom:8px">{tpl['icon']}</div>
+                <div style="font-size:13px;font-weight:{'700' if is_sel else '600'};
+                     color:{'#0A66C2' if is_sel else '#0F172A'}">{tpl['name']}</div>
+                <div style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.4">{tpl['desc']}</div>
+                {'<div style="margin-top:8px;font-size:10px;font-weight:700;color:#0A66C2;letter-spacing:0.05em">✓ ACTIVE</div>' if is_sel else ''}
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        if col.button("Select", key=f"rtpl_{tpl['id']}", use_container_width=True,
+                      type="primary" if is_sel else "secondary"):
+            st.session_state["default_resume_template"] = tpl["id"]
+            st.rerun()
+
+    st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
+    info_box(f"Active resume template: **{cur_rtpl.title()}** — used when generating resumes this session.", kind="success")
+
+    section_header("Cover Letter Template")
+    clcols = st.columns(3)
+    for col, tpl in zip(clcols, CL_TEMPLATES):
+        is_sel = tpl["id"] == cur_cltpl
+        col.markdown(
+            f"""<div style="background:{'rgba(124,58,237,0.07)' if is_sel else 'white'};
+                border:2px solid {'#7C3AED' if is_sel else '#E2E8F0'};
+                border-radius:14px;padding:20px 14px;text-align:center;
+                transition:all 200ms ease;margin-bottom:8px">
+                <div style="font-size:32px;margin-bottom:8px">{tpl['icon']}</div>
+                <div style="font-size:14px;font-weight:{'700' if is_sel else '600'};
+                     color:{'#7C3AED' if is_sel else '#0F172A'}">{tpl['name']}</div>
+                <div style="font-size:12px;color:#64748B;margin-top:5px;line-height:1.4">{tpl['desc']}</div>
+                {'<div style="margin-top:8px;font-size:10px;font-weight:700;color:#7C3AED;letter-spacing:0.05em">✓ ACTIVE</div>' if is_sel else ''}
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        if col.button("Select", key=f"cltpl_{tpl['id']}", use_container_width=True,
+                      type="primary" if is_sel else "secondary"):
+            st.session_state["default_cl_template"] = tpl["id"]
+            st.rerun()
+
+    st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
+    info_box(f"Active cover letter template: **{cur_cltpl.title()}** — used when generating cover letters this session.", kind="success")
+    info_box("Persistent template preferences require a backend schema update. Session defaults reset on page reload.", kind="info")
