@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
-from utils import api_get, api_post, api_upload
+from utils import api_get, api_post, api_upload, cold_start_guard
 from ht_components import (
     inject_global_css, page_header, section_header,
     skill_tags_html, info_box, ai_callout,
@@ -20,6 +20,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_global_css()
+cold_start_guard()
 page_header("Resume & ATS Scorer", "Upload your CV and score it against any job description.")
 
 left, right = st.columns([1, 1], gap="large")

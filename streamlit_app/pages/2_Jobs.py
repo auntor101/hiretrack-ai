@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
-from utils import JOB_TYPE_LABELS, api_get, api_post
+from utils import JOB_TYPE_LABELS, api_get, api_post, cold_start_guard
 from ht_components import (
     inject_global_css, page_header, section_header,
     job_card_html, info_box, kpi_row, HT_COLORS,
@@ -22,6 +22,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_global_css()
+cold_start_guard()
 page_header("Job Board", "Browse and apply to curated opportunities.")
 
 # ── Demo data seeder ──────────────────────────────────────────────────────────

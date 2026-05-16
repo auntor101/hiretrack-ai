@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
-from utils import api_get, api_put
+from utils import api_get, api_put, cold_start_guard
 from ht_components import (
     inject_global_css, page_header, section_header,
     info_box, ai_callout,
@@ -22,6 +22,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_global_css()
+cold_start_guard()
 page_header("Settings", "Configure your HireTrack AI pipeline.")
 
 settings  = api_get("/settings") or {}

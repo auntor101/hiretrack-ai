@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
-from utils import API_BASE, api_get, api_post, api_put
+from utils import API_BASE, api_get, api_post, api_put, cold_start_guard
 from ht_components import (
     inject_global_css, page_header, section_header,
     app_card_html, kpi_row, status_chip_html, ats_chip_html,
@@ -24,6 +24,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_global_css()
+cold_start_guard()
 page_header("My Applications", "Track every application through your pipeline.")
 
 # ── Status KPIs ───────────────────────────────────────────────────────────────

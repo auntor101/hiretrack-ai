@@ -14,7 +14,7 @@ try:
     _PLOTLY = True
 except Exception:
     _PLOTLY = False
-from utils import api_get
+from utils import api_get, cold_start_guard
 from ht_components import (
     inject_global_css, page_header, section_header,
     kpi_row, dark_hero, style_plotly, info_box,
@@ -27,6 +27,7 @@ st.set_page_config(
     layout="wide",
 )
 inject_global_css()
+cold_start_guard()
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 stats      = api_get("/analytics/dashboard") or {}

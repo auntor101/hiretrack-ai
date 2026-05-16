@@ -70,6 +70,50 @@ def _backend_warning(kind: str) -> None:
             f"Current value: `{API_BASE}`",
             icon="⚠️",
         )
+    if not st.session_state.get("_warn_btn_shown"):
+        st.session_state["_warn_btn_shown"] = True
+        if st.button("🔄 Retry Connection", key="retry_backend_conn"):
+            for k in ("_warn_btn_shown", "_backend_ok", "_warmup_n"):
+                st.session_state.pop(k, None)
+            st.rerun()
+
+
+def cold_start_guard() -> None:
+    """Poll /health until Render wakes up, showing a countdown banner.
+    Sets session_state['_backend_ok'] so subsequent pages skip the wait.
+    """
+    import time as _t
+
+    if st.session_state.get("_backend_ok"):
+        return
+
+    health = API_BASE.rstrip("/api/v1").rstrip("/") + "/health"
+    try:
+        r = requests.get(health, headers=_auth_headers(), timeout=8)
+        if r.status_code < 500:
+            st.session_state["_backend_ok"] = True
+            st.session_state.pop("_warmup_n", None)
+            return
+    except Exception:
+        pass
+
+    n = st.session_state.get("_warmup_n", 0)
+    if n >= 12:
+        st.session_state.pop("_warmup_n", None)
+        st.error(
+            "⚠️ **Backend not responding** after 2 minutes. "
+            "Check `API_BASE_URL` in Streamlit secrets, then reload."
+        )
+        st.stop()
+
+    st.session_state["_warmup_n"] = n + 1
+    remaining = (12 - n) * 10
+    st.info(
+        f"⏳ **Backend warming up...** ({remaining}s remaining)  \n"
+        "Render free tier sleeps after inactivity — first load takes **30–60 seconds**."
+    )
+    _t.sleep(10)
+    st.rerun()
 
 
 def api_get(path: str, params: dict | None = None) -> Any:
